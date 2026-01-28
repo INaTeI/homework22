@@ -15,11 +15,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.*
-import androidx.navigation.navArgument
-import java.util.*
-import kotlin.math.ceil
+import kotlin.math.roundToInt
+
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,39 +36,32 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-//класс
+
 
 data class Calculation(
-    val id: String = UUID.randomUUID().toString(),
     val total: Double,
     val people: Int,
-    val tipPercent: Double = 10.0
+    val tipPercent: Double = 0.0
 ) {
-    val tipAmount: Double get() = total * tipPercent / 100
+    val tipAmount: Double get() = (total * tipPercent / 100 * 100).roundToInt() / 100.0
     val totalWithTip: Double get() = total + tipAmount
-    val perPerson: Double get() = ceil(totalWithTip / people)
+    val perPerson: Double get() = (totalWithTip / people * 100).roundToInt() / 100.0 //две цифры после запятой
 }
 
-// VIEWMODEL
 
 class SplitMateViewModel : ViewModel() {
+    var calculation by mutableStateOf<Calculation?>(null)  //
+        private set // без него не работае
 
-    private val calculations = mutableListOf<Calculation>()
-
-    fun addCalculation(calculation: Calculation) {
-        calculations.add(calculation)
-    }
-
-    fun getCalculationById(id: String): Calculation? {
-        return calculations.find { it.id == id }
+    fun calculate(total: Double, people: Int, tipPercent: Double) {
+        calculation = Calculation(total, people, tipPercent)
     }
 
     fun reset() {
-        calculations.clear()
+        calculation = null
     }
 }
 
-//сэкраны
 
 @Composable
 fun HomeScreen(navController: NavHostController) {
@@ -85,37 +77,31 @@ fun HomeScreen(navController: NavHostController) {
             style = MaterialTheme.typography.displayLarge,
             color = MaterialTheme.colorScheme.primary
         )
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(Modifier.height(32.dp))
         Text(
             text = "Делим счёт легко!",
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(64.dp))
+        Spacer(Modifier.height(64.dp))
         Button(
             onClick = { navController.navigate("input") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
+            modifier = Modifier.fillMaxWidth().height(60.dp)
         ) {
             Text("Начать", style = MaterialTheme.typography.titleLarge)
         }
     }
 }
 
+
 @Composable
-fun InputScreen(
-    navController: NavHostController,
-    viewModel: SplitMateViewModel
-) {
+fun InputScreen(navController: NavHostController, viewModel: SplitMateViewModel) {
     var total by remember { mutableStateOf("") }
     var people by remember { mutableStateOf("2") }
     var tipPercent by remember { mutableStateOf("0") }
 
-    val isEnabled = total.toDoubleOrNull() != null &&
-            people.toIntOrNull() != null &&
-            total.toDouble() > 0 &&
-            people.toInt() > 0
+    val isEnabled = total.toDoubleOrNull()?.let { it > 0 } == true &&
+            people.toIntOrNull()?.let { it > 0 } == true
 
     Column(
         modifier = Modifier
@@ -123,10 +109,7 @@ fun InputScreen(
             .padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Введите данные",
-            style = MaterialTheme.typography.headlineLarge
-        )
+        Text("Введите данные", style = MaterialTheme.typography.headlineLarge)
 
         OutlinedTextField(
             value = total,
@@ -152,18 +135,17 @@ fun InputScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(Modifier.height(24.dp))
 
         Button(
             enabled = isEnabled,
             onClick = {
-                val calculation = Calculation(
+                viewModel.calculate(
                     total = total.toDouble(),
                     people = people.toInt(),
                     tipPercent = tipPercent.toDoubleOrNull() ?: 0.0
                 )
-                viewModel.addCalculation(calculation)
-                navController.navigate("result/${calculation.id}")
+                navController.navigate("result")
             },
             modifier = Modifier.fillMaxWidth().height(60.dp)
         ) {
@@ -179,13 +161,11 @@ fun InputScreen(
     }
 }
 
+
+
 @Composable
-fun ResultScreen(
-    navController: NavHostController,
-    calculationId: String,
-    viewModel: SplitMateViewModel
-) {
-    val calculation = viewModel.getCalculationById(calculationId)
+fun ResultScreen(navController: NavHostController, viewModel: SplitMateViewModel) {
+    val calculation = viewModel.calculation
 
     if (calculation == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -235,7 +215,6 @@ fun ResultScreen(
 }
 
 
-
 @Composable
 fun ResultRow(label: String, value: String, bold: Boolean = false) {
     Row(
@@ -250,28 +229,13 @@ fun ResultRow(label: String, value: String, bold: Boolean = false) {
     }
 }
 
-//Навигация
-@Composable
 fun SplitMateApp() {
     val navController = rememberNavController()
-    val viewModel: SplitMateViewModel = viewModel() // 👈 ВАЖНО
+    val viewModel: SplitMateViewModel = viewModel()
 
     NavHost(navController, startDestination = "home") {
-        composable("home") {
-            HomeScreen(navController)
-        }
-        composable("input") {
-            InputScreen(navController, viewModel)
-        }
-        composable(
-            "result/{id}",
-            arguments = listOf(navArgument("id") { type = NavType.StringType })
-        ) {
-            ResultScreen(
-                navController,
-                it.arguments?.getString("id") ?: "",
-                viewModel
-            )
-        }
+        composable("home") { HomeScreen(navController) }
+        composable("input") { InputScreen(navController, viewModel) }
+        composable("result") { ResultScreen(navController, viewModel) }
     }
 }
